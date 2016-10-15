@@ -1,0 +1,6 @@
+*~
+*#
+Lab2/__*
+Lab2/task/*
+!Lab2/task/README
+*.ipynb_checkpoints*

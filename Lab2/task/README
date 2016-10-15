@@ -1,0 +1,3 @@
+Put the task files in this directory. The scripts expect this
+directory to contain a `data` subdirectory with example images
+provided for the task.
