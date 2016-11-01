@@ -1,5 +1,8 @@
 *~
 *#
+Lab1/__*
+Lab1/task/*
+!Lab1/task/README
 Lab2/__*
 Lab2/task/*
 !Lab2/task/README
