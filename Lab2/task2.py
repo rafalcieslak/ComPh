@@ -26,10 +26,21 @@ def load_sec(image_path):
     print("Done.")
     times = np.array([read_exif_exposure_time(name) for name in filenames])
     return images, times
+
+# dcraw -4 -g 1 1 -T _MG_4469.CR2
+def load_sec3_tiff():
+    image_path = "data/sec3/"
+    filenames = ["_MG_4469.tiff", "_MG_4470.tiff", "_MG_4471.tiff"]
+    images = [cv2.imread(image_path + name)/256 for name in filenames]
+    #images = [gamma_decode(image) for image in images]
+    images = [cv2_shuffle(image) for image in images]
+    times = np.array([0.5, 0.2, 0.8])
+    return images, times
     
 #images, times = load_set_memorial()
-#images, times = load_sec("data/sec2/*.JPG")
-images, times = load_sec("data/set3/*.jpg")
+images, times = load_sec("data/sec3/*.JPG")
+#images, times = load_sec("data/set3/*.jpg")
+#images, times = load_sec3_tiff()
 
 # Guess zoom factor for LDR preview
 zoom_factor = 800/np.maximum(images[0].shape[0], images[0].shape[1])
