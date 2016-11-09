@@ -7,7 +7,7 @@ Lab*/data/*
 !Lab*/task/README
 *.ipynb_checkpoints*
 *__pycache__*
-*.out.png
+*out.png
 *.out.hdr
 *.out.hdr.*
 

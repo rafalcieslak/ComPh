@@ -7,7 +7,7 @@ import scipy.ndimage
 import scipy
 import cv2
 
-dataset = 'stata'
+dataset = 'rainbow'
 mark_vertices = True
 display_weights = False
 
@@ -26,20 +26,31 @@ print(points[0])
 if 'flipxy' in data and data['flipxy']:
     points = [(flip_xy(p1), flip_xy(p2)) for p1,p2 in points]
 
-print("Preparing Hs")
-Hs = [np.identity(3)]
-for i in range(1,len(imgs)):
-    print("Computing H between %d and %d" % (i-1,i))
-    Hdiff = find_homography(points[i-1][0], points[i-1][1])
-    Habs = Hs[-1] @ Hdiff
-    Hs.append(Habs)
-
 center = 0
 if 'center' in data:
     center = data['center']
-Hci = np.linalg.inv(Hs[center])
-Hs = [Hci @ H for H in Hs]
     
+print("Preparing Hs")
+Hs = [np.identity(3)]
+for i in range(center+1,len(imgs)):
+    print("Computing H between %d and %d" % (i-1,i))
+    Hdiff = find_homography(points[i-1][0], points[i-1][1])
+    Habs =  Hdiff @ Hs[-1]
+    Hs.append(Habs)
+for i in range(center-1,-1, -1):
+    print("Computing H between %d and %d" % (i+1,i))
+    Hdiff = find_homography(points[i][1], points[i][0])
+    Habs = Hdiff @ Hs[0]
+    Hs = [Habs] + Hs
+
+
+print(Hs)
+    
+"""
+Hci = np.linalg.inv(Hs[center])
+Hs = [Hci . dot(H) for H in Hs]
+"""
+
 His = [np.linalg.inv(H) for H in Hs]
 
 imgBBs = [np.einsum('ba,na->nb', Hi, pointlist_to_homog(image_bounds_pointlist(img)))
@@ -79,6 +90,8 @@ if mark_vertices:
         y -= offset[1]
         cv2.circle(result,(int(x), int(y)),3,(255,0,0),-1)
 
+
+scipy.misc.imsave("out.png", result.copy())
 result = zoom_3ch(result, zoom)
 cv2.imshow('result',cv2_shuffle(result))
     
