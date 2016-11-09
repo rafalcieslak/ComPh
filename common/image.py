@@ -28,6 +28,16 @@ def remove_alpha(image):
     else:
         return image
 
+def flip_xy(pointlist):
+    print("Flippin'")
+    print(pointlist.shape)
+    pointlist2 = np.zeros_like(pointlist)
+    pointlist2[:,0] = pointlist[:,1]
+    pointlist2[:,1] = pointlist[:,0]
+    if pointlist.shape[1] > 2:
+        pointlist2[:,2] = pointlist[:,2]
+    return pointlist2
+
 # (n,2) -> (n,3)
 def pointlist_to_homog(points):
     return np.hstack([points, np.ones((points.shape[0], 1))])
@@ -81,6 +91,18 @@ def img_transform(source_image, function, target_shape=None, constant=[0,0,0], o
     # temporarily in an optimized layout
     return pts.copy()
 
+# Similar to img_transform, but the argument function shall return not coordinates, but values.
+def img_gen(function, target_shape=None):
+    if target_shape is None:
+        target_shape = source_image.shape
+    cx,cy = np.meshgrid(np.arange(target_shape[0]), np.arange(target_shape[1]))
+    coords = np.stack((cx,cy), axis=2).reshape((-1,2), order='F')
+    pts = function(np.fliplr(coords))
+    assert coords.shape[0] == pts.shape[0], ("Original coords shape %s is not mathching samples shape %s." % (coords.shape, pts.shape))
+    tshape = (target_shape[1], target_shape[0], target_shape[2])
+    pts = pts.reshape(tshape, order='F').transpose((1,0,2))
+    return pts.copy()
+
 def img_transform_H(source, H, target_shape, constant=[0,0,0], order=3, offset=np.array([0,0])):
     return img_transform(source, HomographyApplier(H, offset), target_shape, constant, order)
 
@@ -100,3 +122,22 @@ def find_homography(points1, points2):
 def image_bounds_pointlist(image):
     h,w,_ = image.shape
     return np.array([[0,0],[0,h],[w,0],[w,h]])
+
+def img_gen_mask_smooth(img):
+    def one_func(coords):
+        size = np.array([img.shape[1], img.shape[0]])
+        q = 1.0 - np.abs(coords/(size/2) - 1.0)
+        q = q.min(axis=1)
+        # q = np.power(q,2)
+        return combine_channels(q,q,q)
+    i = img_gen(one_func, img.shape)
+    # i = scipy.ndimage.gaussian_filter(i, 10)
+    #low = i.min()
+    #s = 1.0 - low
+    #return (i-low)/s
+    return i
+
+def img_gen_mask_ones(img):
+    def one_func(coords):
+        return np.ones((coords.shape[0], 3))
+    return img_gen(one_func, img.shape)
