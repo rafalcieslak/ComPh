@@ -18,6 +18,24 @@ def per_channel(func, image):
 def zoom_3ch(image, factor):
     return per_channel(lambda x : scipy.ndimage.zoom(x, factor, order=1), image)
 
+
+def rgb2Y(img):
+    return np.dot(img, np.array([ 0.2989,  0.5866,  0.1145]))
+
+# Functions for converting color space on a three-channel image between RGB and YCbCr.
+# Coefficients follow JPEG specification (https://www.w3.org/Graphics/JPEG/jfif3.pdf).
+def split_to_YCbCr(img):
+    Y  = np.dot(img, np.array([ 0.2989,  0.5866,  0.1145]))
+    Cb = np.dot(img, np.array([-0.1687, -0.3313,  0.5000]))
+    Cr = np.dot(img, np.array([ 0.5000, -0.4184, -0.0816]))
+    return Y,Cb,Cr
+def merge_from_YCbCr(Y, Cb, Cr):
+    img = combine_channels(Y, Cb, Cr)
+    r = np.dot(img, np.array([1.0,  0.0000,  1.4022]))
+    g = np.dot(img, np.array([1.0, -0.3456, -0.7145]))
+    b = np.dot(img, np.array([1.0,  1.7710,  0.0000]))
+    return np.maximum(np.minimum(1.0,combine_channels(r,g,b)), 0.0)
+
 # Shuffle dimentions to match cv2 color layout
 def cv2_shuffle(image):
     return np.array([image.T[2], image.T[1], image.T[0]]).T
