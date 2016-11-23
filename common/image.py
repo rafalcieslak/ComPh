@@ -124,6 +124,30 @@ def img_gen(function, target_shape=None):
 def img_transform_H(source, H, target_shape, constant=[0,0,0], order=3, offset=np.array([0,0])):
     return img_transform(source, HomographyApplier(H, offset), target_shape, constant, order)
 
+# Helper class for img_transform_unwrap_envmap
+class Unwrapper:
+    def __init__(self, input_shape, target_shape):
+        self.input_shape = np.array([input_shape[1], input_shape[0]])
+        self.target_shape = target_shape
+    def __call__(self, coords):
+        x, y = coords[:,0], coords[:,1]
+        theta = (x/(self.target_shape[1])      ) * 2*np.pi
+        phi   = (y/(self.target_shape[0]) - 0.5) * np.pi
+        costheta, sintheta = np.cos(theta), np.sin(theta)
+        cosphi, sinphi = np.cos(phi), np.sin(phi)
+        dy, dx, dz = cosphi * sintheta, -sinphi, - cosphi * costheta
+        q = np.maximum(np.sqrt(dx*dx + dy*dy), 0.0001)
+        r = (np.arccos(dz)/q)/np.pi
+        u,v = dy*r, -dx*r
+        out = (np.hstack([u[:,None], v[:,None]]) + 1.0)/2
+        return out * self.input_shape
+    
+# Transforms a radial envmap into a rectangular envmap. Result shape will be (180,360)*scale.
+def img_transform_unwrap_envmap(source, scale=2.0):
+    target_shape = (int(180 * scale), int(360 * scale), 3)
+    res = img_transform(source, Unwrapper(source.shape, target_shape), target_shape=target_shape)
+    return np.maximum(0.0, res)
+    
 
 def find_homography(points1, points2):
     A = []
