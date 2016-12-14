@@ -7,14 +7,14 @@ import imageio
 from common.image import *
 from common.show import *
 
-probe1, p1 = imageio.imread("data/1_relighting/grace_probe.hdr"), 0.00005
+probe1, p1 = imageio.imread("data/1_relighting/grace_probe.hdr"), 0.0001
 probe2, p2 = imageio.imread("data/1_relighting/rnl_probe.hdr"), 0.05
 probe3, p3 = imageio.imread("data/1_relighting/uffizi_probe.hdr"), 0.05
 probe4, p4 = imageio.imread("data/1_relighting/beach_probe.hdr"), 0.05
 
 probe, p = probe1, p1
-fps = 40
-time = 15
+fps = 30
+time = 10
 
 envmap_scale = 2.0
 probeB = img_transform_unwrap_envmap(probe, envmap_scale)
@@ -46,8 +46,10 @@ tps = np.hstack([thetas[:,None], phis[:,None]]) * envmap_scale
 
 light_intens = np.loadtxt("data/light_intensities.txt", usecols=(1,2,3))
 
+probeB = scipy.ndimage.gaussian_filter(probeB, [20,20,0])
+
 def relight(envmap):
-    envmap = scipy.ndimage.gaussian_filter(envmap, [2,2,0])
+    # envmap = scipy.ndimage.gaussian_filter(envmap, [5,5,0])
     sum = np.zeros_like(images[0])
     for i in range(0,image_n):
         tp = tps[i]
@@ -71,8 +73,8 @@ print("Exporting")
 exportname = "output.gif"
 kargs = { 'duration': 1/fps }
 imageio.mimsave(exportname, frames, 'GIF', **kargs)
-    
-#cv2.imshow('map', cv2_shuffle(gamma_encode(scipy.ndimage.gaussian_filter(probeB, [1,1,0]))))
+ 
+#cv2.imshow('map', cv2_shuffle(gamma_encode(scipy.ndimage.gaussian_filter(probeB, [20,20,0]))))
 #cv2.imshow('relit', cv2_shuffle(gamma_encode(res)))
 
 #if cv2.waitKey(0) & 0xff == 27:

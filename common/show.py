@@ -7,7 +7,7 @@ import numpy as np
 # I don't know why, but print clearly ignores numpy output settings
 # for some (large?) arrays. show() fixes this.
 def show(array):
-    print(np.array_str(array,suppress_small=True,precision=5))
+    print(np.array_str(array,suppress_small=True,precision=5,max_line_width=200))
 
 
 # Verbose aliases for gamma transformation
