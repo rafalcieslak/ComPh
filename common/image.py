@@ -77,6 +77,14 @@ class HomographyApplier:
         dataH = np.einsum('ba,na->nb', self.H, dataH)
         data = pointlist_from_homog(dataH)
         return data
+
+    
+class TranslationApplier:
+    def __init__(self, T):
+        self.T = T
+    def __call__(self, data):
+        data = data - self.T
+        return data
     
 # Applies an arbitrary image transformation. The function which is
 # passed as the second argument will be called with a long list of
@@ -123,6 +131,9 @@ def img_gen(function, target_shape=None):
 
 def img_transform_H(source, H, target_shape, constant=[0,0,0], order=3, offset=np.array([0,0])):
     return img_transform(source, HomographyApplier(H, offset), target_shape, constant, order)
+
+def img_transform_translate(source, T, target_shape, constant=[0,0,0], order=3):
+    return img_transform(source, TranslationApplier(T), target_shape, constant, order)
 
 # Helper class for img_transform_unwrap_envmap
 class Unwrapper:
@@ -184,110 +195,60 @@ def img_gen_mask_ones(img):
         return np.ones((coords.shape[0], 3))
     return img_gen(one_func, img.shape)
 
+def image_split_blocks(image, Bh, Bw):
+    Th, Tw = image.shape[0], image.shape[1]
+    Nh, Nw = Th/Bh, Tw/Bw
+    assert(Nh == int(Nh))
+    assert(Nw == int(Nw))
+    Nh, Nw = int(Nh), int(Nw)
+    res = []
+    for y in range(Bh):
+        row = []
+        for x in range(Bw):
+            block = image[y*Nh : (y+1)*Nh, x*Nw : (x+1)*Nw]
+            row += [block]
+        res += [row]
+    return np.asarray(res)
 
-def deconvL2_frequency(image, filt, we):
+def image_join_blocks(image):
+    Bh, Bw, Nh, Nw, c = image.shape
+    Th, Tw = Bh*Nh,  Bw*Nw
+    res = np.zeros((Th, Tw, c))
     
-    n,m,_ = image.shape
-    
-    filt = np.flipud(np.fliplr(filt))
-    
-    show(filt)
+    for y in range(Bh):
+        for x in range(Bw):
+            res[y*Nh : (y+1)*Nh, x*Nw : (x+1)*Nw] = image[y,x]
+    return res
 
-    Gx = np.fft.fft2(np.array([-1, 1]).reshape((1,2)), (n,m))
-    Gy = np.fft.fft2(np.array([-1, 1]).reshape((2,1)), (n,m))
-    F  = np.fft.fft2(filt, (n,m))
-
-    Ifft = np.fft.fft2(image, axes=[0,1])
-    
-    #b = np.conj(F)[:,:,np.newaxis] * Ifft
-    b = F[:,:,np.newaxis] * Ifft
-    A = np.conj(F) * F + we*(np.conj(Gx) * Gx + np.conj(Gy) * Gy)
-
-    X = b/A[:,:,np.newaxis]
-    x = np.fft.ifft2(X, axes=[0,1])
-    x = np.abs(x)
-
-    dy = int(np.floor((filt.shape[0]-1)/2.))
-    dx = int(np.floor((filt.shape[1]-1)/2.))
-    
-    x = np.pad(x, ((0,dy),(0,dx),(0,0)), mode='constant', constant_values=0)[dy:n+dy, dx:m+dx, :]
-    
-    return x
-
-def deconvL2_w(I,filt1,we,max_it,weight_x,weight_y,weight_xx,weight_yy,weight_xy):
-    n,m = I.shape
-
-    hfs1_x1 = int(np.floor((filt1.shape[1]-1)/2))
-    hfs1_x2 = int(np.ceil ((filt1.shape[1]-1)/2))
-    hfs1_y1 = int(np.floor((filt1.shape[0]-1)/2))
-    hfs1_y2 = int(np.ceil ((filt1.shape[0]-1)/2))
-    shifts1 = [-hfs1_x1,  hfs1_x2,  -hfs1_y1,  hfs1_y2]
-
-    hfs_x1=hfs1_x1
-    hfs_x2=hfs1_x2
-    hfs_y1=hfs1_y1
-    hfs_y2=hfs1_y2
-    
-    m = m + hfs_x1 + hfs_x2
-    n = n + hfs_y1 + hfs_y2
-    N = m * n
-    mask = np.zeros((n,m))
-    #mask[hfs_y1+1:n-hfs_y2, hfs_x1+1:m-hfs_x2] = 1
-    mask[hfs_y1:n-hfs_y2, hfs_x1:m-hfs_x2] = 1
+class KernelGenGaussian:
+    def __init__(self, sigma, R):
+        self.sigma = sigma
+        self.R = R
+    def __call__(self, data):
+        data = data - self.R
+        dist = (data**2).sum(axis=1)
+        # Dist is already squared!
+        return np.exp(-(dist)/(2 * (self.sigma**2)))
 
     
-    tI = I
-    I = np.zeros((n,m))
-    I[hfs_y1:n-hfs_y2, hfs_x1:m-hfs_x2] = tI;
-    #x = tI[
-    #    [np.ones((1,hfs_y1)), 0:end, end*np.ones((1,hfs_y2))],
-    #    [np.ones((1,hfs_x1)), 0:end, end*np.ones((1,hfs_x2))]
-    #]
+class KernelGenSquare:
+    def __init__(self, r, R):
+        self.r = r
+        self.R = R
+    def __call__(self, data):
+        data = np.abs(data - self.R).max(axis=1)
+        mask = data >= self.r
+        data[mask], data[~mask] = 0, 1
+        # Dist is already squared!
+        return data
 
-def deconv_sps(I, filt1, we, max_it=200):
-    n,m = I.shape
-    
-    hfs1_x1 = int(np.floor((filt1.shape[1]-1)/2))
-    hfs1_x2 = int(np.ceil ((filt1.shape[1]-1)/2))
-    hfs1_y1 = int(np.floor((filt1.shape[0]-1)/2))
-    hfs1_y2 = int(np.ceil ((filt1.shape[0]-1)/2))
-    shifts1 = [-hfs1_x1,  hfs1_x2,  -hfs1_y1,  hfs1_y2]
-
-    
-    hfs_x1=hfs1_x1
-    hfs_x2=hfs1_x2
-    hfs_y1=hfs1_y1
-    hfs_y2=hfs1_y2
-    
-
-    m = m + hfs_x1 + hfs_x2
-    n = n + hfs_y1 + hfs_y2
-    N = m * n
-    mask = np.zeros((n,m))
-    #mask[hfs_y1+1:n-hfs_y2, hfs_x1+1:m-hfs_x2] = 1
-    mask[hfs_y1:n-hfs_y2, hfs_x1:m-hfs_x2] = 1
-
-    tI = I
-    I = np.zeros((n,m))
-    I[hfs_y1:n-hfs_y2, hfs_x1:m-hfs_x2] = tI 
-    x = I
-
-    dxf = np.array([1, -1]).reshape((1,2))
-    dyf = np.array([1, -1]).reshape((2,1))
-    dxxf = np.array([-1, 2, -1]).reshape((1,3))
-    dyyf = np.array([-1, 2, -1]).reshape((3,1))
-    dxyf = np.array([-1, 1, 1, -1]).reshape((2,2))
-
-    weight_x = np.ones((n,m-1))
-    weight_y = np.ones((n-1,m))
-    weight_xx = np.ones((n,m-2))
-    weight_yy = np.ones((n-2,m))
-    weight_xy = np.ones((n-1,m-1))
-
-    [x] = deconvL2_w(x[hfs_y1:n-hfs_y2,hfs_x1:m-hfs_x2],
-                     filt1,we,max_it,weight_x,weight_y,weight_xx,weight_yy,weight_xy);
-
-
-    
-    return I
-
+class KernelGenCircle:
+    def __init__(self, r, R):
+        self.r = r
+        self.R = R
+    def __call__(self, data):
+        data = ((data - self.R)**2).sum(axis=1)
+        mask = (data >= (self.r**2))
+        data[mask], data[~mask] = 0, 1
+        # Dist is already squared!
+        return data

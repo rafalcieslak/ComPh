@@ -14,5 +14,10 @@ Lab*/data/*
 Lab2/png
 
 Lab5/*.gif
-
 Lab6/*.png
+Lab7/*.png
+Lab7/*.gif
+Lab7/*.jpg
+Lab7/*.tar.gz
+
+*.ficache
